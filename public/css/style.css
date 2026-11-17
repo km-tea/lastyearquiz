@@ -193,3 +193,11 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
 .bulk a.btn { text-decoration: none; text-align: center; }
 .bulk-result { margin-top: 10px; }
 .bulk-result ul { margin: 8px 0 0; padding-left: 20px; color: #b0342c; font-weight: 600; max-height: 220px; overflow: auto; }
+
+/* 학생 첫 화면 하단의 관리자 입장 버튼 (눈에 띄지 않게 작게) */
+.admin-entry { text-align: center; margin-top: 28px; }
+.admin-entry a {
+  display: inline-block; padding: 8px 16px; border-radius: 99px;
+  font-size: 14px; font-weight: 700; color: var(--muted); background: #f1ece0; text-decoration: none;
+}
+.admin-entry a:hover, .admin-entry a:focus-visible { background: #e6dcc4; color: var(--ink); }

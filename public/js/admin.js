@@ -15,11 +15,13 @@
     statusGrade: 1,
     statusClass: 1,
     qGrade: 1,
+    qPage: 0,            // 등록된 문항 목록의 현재 쪽 (0부터)
     questions: [],
     dialogSeat: null,
     bulkRows: null,
   };
 
+  const Q_PAGE_SIZE = 5;       // 등록된 문항 목록은 5개씩 넘겨 가며 보고 삭제
   const NONSENSE_NEEDED = 5; // 넌센스 퀴즈는 학년마다 5개 이상 있어야 학생이 고를 수 있음
 
   const STATUS_LABEL = { started: '풀이 중/중단', completed: '수료', failed: '미수료' };
@@ -243,6 +245,7 @@
   // 폼의 학년을 바꾸면 아래 '등록된 문항' 목록도 그 학년으로 맞춘다
   $('#q-grade-select').addEventListener('change', (e) => {
     state.qGrade = Number(e.target.value);
+    state.qPage = 0;
     renderQuestions();
   });
 
@@ -254,7 +257,7 @@
       ...grades.map((g) =>
         el('button', {
           class: `tab${g.grade === state.qGrade ? ' active' : ''}`,
-          onclick: () => { state.qGrade = g.grade; renderQuestions(); },
+          onclick: () => { state.qGrade = g.grade; state.qPage = 0; renderQuestions(); },
         }, `${g.grade}학년`, el('small', {}, `${state.questions.filter((q) => q.grade === g.grade).length}문항`)),
       ),
     );
@@ -279,9 +282,34 @@
     warn.hidden = notes.length === 0;
     warn.replaceChildren(...notes.map((t) => el('div', {}, t)));
 
+    // 5개씩 끊어서 보여 주고, 이전/다음으로 넘긴다. (삭제 후 쪽 수가 줄면 자동으로 맞춤)
+    const pages = Math.max(1, Math.ceil(list.length / Q_PAGE_SIZE));
+    state.qPage = Math.min(Math.max(0, state.qPage), pages - 1);
+    const start = state.qPage * Q_PAGE_SIZE;
+    const pageItems = list.slice(start, start + Q_PAGE_SIZE);
+
+    const buildPager = () => el('div', { class: 'pager' },
+      el('button', {
+        class: 'btn secondary small', type: 'button',
+        ...(state.qPage === 0 ? { disabled: '' } : {}),
+        onclick: () => { state.qPage -= 1; renderQuestions(); },
+      }, '◀ 이전'),
+      el('span', { class: 'pager-info' }, `${state.qPage + 1} / ${pages}쪽 · 전체 ${list.length}개`),
+      el('button', {
+        class: 'btn secondary small', type: 'button',
+        ...(state.qPage >= pages - 1 ? { disabled: '' } : {}),
+        onclick: () => { state.qPage += 1; renderQuestions(); },
+      }, '다음 ▶'),
+    );
+    const showPager = list.length > 0;
+    $('#q-pager-top').replaceChildren(...(showPager ? [buildPager()] : []));
+    $('#q-pager').replaceChildren(...(showPager ? [buildPager()] : []));
+    $('#q-empty').hidden = showPager;
+
     $('#q-list').replaceChildren(
-      ...list.map((q) => {
+      ...pageItems.map((q, i) => {
         const meta = el('div', { class: 'meta' },
+          el('span', { class: 'q-no' }, `${start + i + 1}번`),
           q.category === 'nonsense'
             ? el('span', { class: 'chip nonsense' }, '넌센스')
             : el('span', { class: 'chip' }, q.subject),
@@ -322,6 +350,7 @@
       document.querySelectorAll('.mc-text').forEach((i) => { i.value = ''; });
       toast(`${body.grade}학년 문항을 추가했어요.`);
       state.qGrade = body.grade;
+      state.qPage = Number.MAX_SAFE_INTEGER; // 렌더링할 때 마지막 쪽으로 맞춰짐
       await loadQuestions();
       renderQuestions();
     } catch (ex) {
@@ -331,7 +360,8 @@
   });
 
   async function deleteQuestion(q) {
-    if (!confirm('이 문항을 삭제할까요?')) return;
+    const preview = q.body.length > 40 ? `${q.body.slice(0, 40)}…` : q.body;
+    if (!confirm(`이 문항을 삭제할까요?\n\n${preview}`)) return;
     try {
       await api(`/api/admin/questions?id=${q.id}`, { method: 'DELETE' });
       await loadQuestions();

@@ -268,3 +268,8 @@ body.student button { -webkit-user-select: none; user-select: none; }
   .radio-line input[type="radio"], .radio-group input { width: 24px; height: 24px; }
   input[type="text"], input[type="password"], select, textarea { padding: 13px 14px; font-size: 17px; }
 }
+
+/* ---- 관리자: 등록된 문항 목록 (5개씩 넘기기) ---- */
+.pager { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+.pager-info { font-weight: 800; font-size: 15px; min-width: 150px; text-align: center; }
+.q-no { font-weight: 800; color: var(--muted); font-size: 14px; }

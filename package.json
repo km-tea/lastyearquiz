@@ -1,0 +1,17 @@
+{
+  "name": "year-end-quiz",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "초등 1~6학년 학년 마무리 퀴즈 (Neon + Netlify + GitHub)",
+  "scripts": {
+    "dev": "netlify dev",
+    "test": "node --test tests/logic.test.js tests/api.test.js"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

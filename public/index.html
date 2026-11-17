@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>학년 마무리 퀴즈</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="student">
+  <main class="shell">
+
+    <section class="screen card center" data-screen="loading">
+      <div class="big-emoji">⏳</div>
+      <p>불러오는 중이에요…</p>
+    </section>
+
+    <!-- 1) 학년 선택 -->
+    <section class="screen card" data-screen="grade" hidden>
+      <div class="center">
+        <div class="big-emoji">🎒</div>
+        <h1>학년 마무리 퀴즈</h1>
+        <p class="muted">몇 학년인가요?</p>
+      </div>
+      <div class="grid grades" id="grade-list"></div>
+    </section>
+
+    <!-- 2) 반 / 번호 선택 -->
+    <section class="screen card" data-screen="seat" hidden>
+      <h2 id="seat-title"></h2>
+      <div class="label">몇 반인가요?</div>
+      <div class="grid classes" id="class-list"></div>
+      <div class="label">몇 번인가요?</div>
+      <div class="grid numbers" id="number-list"></div>
+      <div class="seat-summary" id="seat-summary"></div>
+      <button class="btn" id="seat-confirm" disabled>맞아요, 시작할게요</button>
+      <button class="btn secondary" id="seat-back">학년 다시 고르기</button>
+      <p class="muted center" style="margin-top:12px;font-size:14px">
+        번호를 잘못 고르면 다른 친구가 참여할 수 없어요. 꼭 내 번호를 확인해요!
+      </p>
+    </section>
+
+    <!-- 넌센스 문제 선택 (퀴즈 풀이 전) -->
+    <section class="screen card center" data-screen="nonsense-ask" hidden>
+      <div class="big-emoji">🤪</div>
+      <h2>넌센스 문제도 풀어볼래요?</h2>
+      <p class="muted">재미로 푸는 문제예요. 수료와는 상관없어요!</p>
+      <p class="notice" id="nonsense-note" hidden>아직 넌센스 문제가 준비되지 않았어요. 준비되면 풀어 볼 수 있어요!</p>
+      <button class="btn" id="nonsense-yes">네, 풀어볼래요!</button>
+      <button class="btn secondary" id="nonsense-no">아니요, 바로 퀴즈 풀래요</button>
+    </section>
+
+    <!-- 5초 안내 -->
+    <section class="screen card center" data-screen="countdown" hidden>
+      <h2>잠시 후 문제 풀이가 시작돼요!</h2>
+      <div class="countdown-num" id="count-num">5</div>
+      <p class="muted">초 뒤에 시작해요. 준비됐나요?</p>
+    </section>
+
+    <!-- 문제 풀이 (넌센스 / 정규 공용) -->
+    <section class="screen card" data-screen="quiz" hidden>
+      <div class="progress" id="progress"></div>
+      <div class="chips"><span class="chip" id="q-subject"></span><span class="chip type" id="q-type"></span></div>
+      <div class="question-body" id="q-body"></div>
+      <div class="options" id="q-options"></div>
+      <div class="feedback" id="q-feedback" hidden></div>
+      <p class="error-text" id="quiz-error" hidden></p>
+      <button class="btn" id="q-next" disabled>다음 문제</button>
+    </section>
+
+    <!-- 수료 -->
+    <section class="screen card center" data-screen="done" hidden>
+      <div class="big-emoji">🎉</div>
+      <h1>수료 완료!</h1>
+      <p class="result-score" id="done-seat"></p>
+      <p>올 한 해 정말 수고했어요.<br>5문제를 모두 맞혀 수료를 완료했어요!</p>
+    </section>
+
+    <!-- 틀렸을 때: 안내 후 첫 화면(학년 선택)으로 -->
+    <section class="screen card center" data-screen="fail" hidden>
+      <div class="big-emoji">😢</div>
+      <h1>틀렸어요!</h1>
+      <p class="result-score" id="fail-score"></p>
+      <p>괜찮아요, 다시 도전해 봐요.<br>처음 화면으로 돌아가서 다시 시작하면 돼요.</p>
+      <p class="muted" id="fail-timer"></p>
+      <button class="btn" id="fail-home">지금 처음 화면으로</button>
+    </section>
+
+    <!-- 참여 제한 / 오류 -->
+    <section class="screen card center" data-screen="blocked" hidden>
+      <div class="big-emoji" id="blocked-emoji">✋</div>
+      <h2 id="blocked-title"></h2>
+      <p id="blocked-msg"></p>
+      <button class="btn secondary" id="blocked-home">처음으로</button>
+    </section>
+
+  </main>
+  <script src="/js/student.js"></script>
+</body>
+</html>

@@ -4,7 +4,7 @@ import { verifyToken } from '../lib/auth.js';
 
 const TOTAL = 5;
 
-// 3단계: 답안 제출 → 서버에서 채점 (5문제 모두 정답이면 수료)
+// 3단계: 답안 제출 → 서버에서 채점 (일반/넌센스 상관없이 5문제 모두 정답이면 수료)
 export default handleErrors(async (req) => {
   if (req.method !== 'POST') return notAllowed();
 

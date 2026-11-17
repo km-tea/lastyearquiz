@@ -10,7 +10,7 @@ const CIRCLED = { '①': 1, '②': 2, '③': 3, '④': 4 };
 
 function parseCategory(s) {
   const t = s.replace(/\s+/g, '');
-  if (t === '' || t === '정규' || t === '정규문제') return 'regular';
+  if (t === '' || t === '정규' || t === '정규문제' || t === '일반' || t === '일반문제') return 'regular';
   if (t === '넌센스' || t === '넌센스문제') return 'nonsense';
   return null;
 }
@@ -54,7 +54,7 @@ export function parseBulkRows(rows) {
 
     const grade = r['학년'].replace(/학년$/, '');
     const category = parseCategory(r['구분'] ?? '');
-    if (!category) return fail('구분은 "정규" 또는 "넌센스"로 입력해 주세요.');
+    if (!category) return fail('구분은 "정규"(일반) 또는 "넌센스"로 입력해 주세요.');
     const type = parseType(r['유형'] ?? '');
     if (!type) return fail('유형은 "객관식" 또는 "OX"로 입력해 주세요.');
 

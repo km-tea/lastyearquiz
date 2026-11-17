@@ -89,12 +89,6 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   border-radius: 14px; padding: 16px; font-size: 18px; font-weight: 600;
 }
 .option.selected { border-color: var(--primary); background: #e8f0ff; }
-.option:disabled { opacity: 1; cursor: default; }
-.option.correct { border-color: var(--ok); background: var(--ok-bg); color: #137a50; }
-.option.wrong { border-color: var(--bad); background: var(--bad-bg); color: #b0342c; }
-.feedback { border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; font-weight: 800; }
-.feedback.good { background: var(--ok-bg); color: #137a50; }
-.feedback.bad { background: var(--bad-bg); color: #b0342c; }
 .options.ox { grid-template-columns: 1fr 1fr; }
 .options.ox .option { text-align: center; font-size: 56px; font-weight: 900; padding: 22px 0; }
 
@@ -201,3 +195,76 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
   font-size: 14px; font-weight: 700; color: var(--muted); background: #f1ece0; text-decoration: none;
 }
 .admin-entry a:hover, .admin-entry a:focus-visible { background: #e6dcc4; color: var(--ink); }
+
+/* ---- 퀴즈 종류 선택 (넌센스 / 일반) ---- */
+.track-grid { display: grid; gap: 14px; grid-template-columns: 1fr; margin: 20px 0 18px; }
+.track-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: 3px solid var(--line); background: #fffdf8; color: var(--ink);
+  border-radius: 18px; padding: 22px 14px;
+}
+.track-btn strong { font-size: 22px; }
+.track-btn small { font-size: 14px; color: var(--muted); }
+.track-emoji { font-size: 48px; line-height: 1.1; }
+.track-btn:not(:disabled):hover,
+.track-btn:not(:disabled):focus-visible { border-color: var(--primary); background: #e8f0ff; }
+.track-btn:not(:disabled):active { transform: scale(0.98); }
+
+/* ---- 관리자: 상단 버튼 묶음 ---- */
+.topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+a.btn { text-decoration: none; text-align: center; }
+
+/* ---- 태블릿 / 터치 화면 ---- */
+body { touch-action: manipulation; }  /* 두 번 탭해서 확대되는 것 방지 (핀치 확대는 가능) */
+button, .btn, .tab, .seg span { -webkit-tap-highlight-color: transparent; }
+body.student button { -webkit-user-select: none; user-select: none; }
+.pick, .option, .tab, .seat, .btn { min-height: 48px; }
+.shell {
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-bottom: max(48px, env(safe-area-inset-bottom));
+}
+
+@media (min-width: 768px) {
+  body.student .shell { max-width: 780px; padding-top: 40px; }
+  body.student .card { padding: 36px 40px; }
+  body.student .big-emoji { font-size: 84px; }
+  body.student h1 { font-size: 36px; }
+  body.student h2 { font-size: 28px; }
+  .btn { font-size: 22px; padding: 20px 22px; }
+  .btn.small { font-size: 16px; padding: 12px 18px; }
+  .grid { gap: 14px; }
+  .grid.grades { grid-template-columns: repeat(3, 1fr); }
+  .grid.classes { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+  .grid.numbers { grid-template-columns: repeat(10, 1fr); }
+  .pick { font-size: 22px; padding: 18px 8px; }
+  .grade-btn { padding: 34px 8px; font-size: 28px; }
+  .label { font-size: 20px; }
+  .seat-summary { font-size: 26px; }
+  .countdown-num { font-size: 160px; }
+  .progress span { height: 10px; }
+  .chip { font-size: 16px; padding: 6px 16px; }
+  .question-body { font-size: 30px; margin: 12px 0 28px; }
+  .options { gap: 14px; }
+  .option { font-size: 24px; padding: 22px 24px; }
+  .options.ox .option { font-size: 72px; padding: 30px 0; }
+  .result-score { font-size: 26px; }
+  .track-grid { grid-template-columns: 1fr 1fr; gap: 20px; }
+  .track-btn { padding: 36px 18px; }
+  .track-emoji { font-size: 72px; }
+  .track-btn strong { font-size: 28px; }
+  .track-btn small { font-size: 17px; }
+  .admin-entry a { font-size: 16px; padding: 12px 22px; }
+  .seat-grid { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); }
+}
+
+/* 손가락으로 누르는 기기(태블릿·휴대폰): 관리자 화면 버튼/입력칸을 넉넉하게 */
+@media (pointer: coarse) {
+  .tab { padding: 12px 16px; }
+  .tabs.sub .tab { padding: 10px 14px; }
+  .seat { padding: 14px 0; }
+  .seg span { padding: 12px 18px; }
+  .btn.small { padding: 12px 18px; }
+  .radio-line input[type="radio"], .radio-group input { width: 24px; height: 24px; }
+  input[type="text"], input[type="password"], select, textarea { padding: 13px 14px; font-size: 17px; }
+}

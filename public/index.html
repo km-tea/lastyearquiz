@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>학년 마무리 퀴즈</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
@@ -40,14 +40,24 @@
       </p>
     </section>
 
-    <!-- 넌센스 문제 선택 (퀴즈 풀이 전) -->
-    <section class="screen card center" data-screen="nonsense-ask" hidden>
-      <div class="big-emoji">🤪</div>
-      <h2>넌센스 문제도 풀어볼래요?</h2>
-      <p class="muted">재미로 푸는 문제예요. 수료와는 상관없어요!</p>
-      <p class="notice" id="nonsense-note" hidden>아직 넌센스 문제가 준비되지 않았어요. 준비되면 풀어 볼 수 있어요!</p>
-      <button class="btn" id="nonsense-yes">네, 풀어볼래요!</button>
-      <button class="btn secondary" id="nonsense-no">아니요, 바로 퀴즈 풀래요</button>
+    <!-- 퀴즈 종류 선택 (반/번호 확인 뒤): 넌센스 / 일반 중 하나 -->
+    <section class="screen card center" data-screen="track" hidden>
+      <div class="big-emoji">🧩</div>
+      <h2>어떤 퀴즈를 풀까요?</h2>
+      <p class="muted">둘 중 하나를 골라요. 어느 쪽이든 <strong>5문제를 모두 맞히면 수료</strong>예요!</p>
+      <div class="track-grid">
+        <button type="button" class="track-btn" id="track-nonsense">
+          <span class="track-emoji">🤪</span>
+          <strong>넌센스 퀴즈</strong>
+          <small></small>
+        </button>
+        <button type="button" class="track-btn" id="track-regular">
+          <span class="track-emoji">📚</span>
+          <strong>일반 퀴즈</strong>
+          <small></small>
+        </button>
+      </div>
+      <button class="btn secondary" id="track-home">처음 화면으로</button>
     </section>
 
     <!-- 5초 안내 -->
@@ -57,13 +67,12 @@
       <p class="muted">초 뒤에 시작해요. 준비됐나요?</p>
     </section>
 
-    <!-- 문제 풀이 (넌센스 / 정규 공용) -->
+    <!-- 문제 풀이 (넌센스 / 일반 공용) -->
     <section class="screen card" data-screen="quiz" hidden>
       <div class="progress" id="progress"></div>
       <div class="chips"><span class="chip" id="q-subject"></span><span class="chip type" id="q-type"></span></div>
       <div class="question-body" id="q-body"></div>
       <div class="options" id="q-options"></div>
-      <div class="feedback" id="q-feedback" hidden></div>
       <p class="error-text" id="quiz-error" hidden></p>
       <button class="btn" id="q-next" disabled>다음 문제</button>
     </section>
@@ -74,6 +83,8 @@
       <h1>수료 완료!</h1>
       <p class="result-score" id="done-seat"></p>
       <p>올 한 해 정말 수고했어요.<br>5문제를 모두 맞혀 수료를 완료했어요!</p>
+      <p class="muted" id="done-timer"></p>
+      <button class="btn" id="done-home">지금 처음 화면으로</button>
     </section>
 
     <!-- 틀렸을 때: 안내 후 첫 화면(학년 선택)으로 -->

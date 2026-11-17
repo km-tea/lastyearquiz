@@ -7,7 +7,7 @@ export const SUBJECTS = [
   '통합교과', '실과', '체육', '음악', '미술', '안전', '기타',
 ];
 export const QUIZ_LAYOUT = { ox: 2, mc: 3 }; // 정규 퀴즈: 총 5문제
-export const NONSENSE_COUNT = 3;             // 넌센스 라운드에서 한 번에 내는 문제 수 (수료와 무관)
+export const NONSENSE_COUNT = 5;             // 넌센스 퀴즈 문제 수 (일반 퀴즈처럼 모두 맞히면 수료)
 export const NONSENSE_SUBJECT = '넌센스';
 export const CATEGORIES = ['regular', 'nonsense'];
 export const ALREADY_MESSAGE = '이미 수료를 완료했어요. 다시 참여하려면 선생님께 말씀드려 주세요.';

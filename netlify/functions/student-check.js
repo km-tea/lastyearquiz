@@ -1,11 +1,12 @@
 import { getSql } from '../lib/db.js';
 import { json, readJson, notAllowed, handleErrors } from '../lib/http.js';
-import { parseSeat, ALREADY_MESSAGE } from '../lib/config.js';
+import { parseSeat, ALREADY_MESSAGE, NONSENSE_COUNT } from '../lib/config.js';
 import { loadPool, countNonsense } from '../lib/questions.js';
 import { pickQuestions } from '../lib/pick.js';
 
 // 1단계: 번호 확인 (참여 기록은 만들지 않음)
 //  · 수료한 학생만 막고, 미수료/중간 이탈 학생은 몇 번이든 다시 도전할 수 있다.
+//  · 일반 퀴즈 / 넌센스 퀴즈 중 이 학년에서 출제 가능한 쪽을 알려 준다. (둘 중 하나만 있어도 진행 가능)
 export default handleErrors(async (req) => {
   if (req.method !== 'POST') return notAllowed();
 
@@ -20,12 +21,12 @@ export default handleErrors(async (req) => {
     return json({ error: ALREADY_MESSAGE, code: 'ALREADY' }, 409);
   }
 
-  const pool = await loadPool(sql, seat.grade);
-  if (!pickQuestions(pool)) {
+  const regularAvailable = pickQuestions(await loadPool(sql, seat.grade)) !== null;
+  const nonsenseAvailable = (await countNonsense(sql, seat.grade)) >= NONSENSE_COUNT;
+  if (!regularAvailable && !nonsenseAvailable) {
     return json({ error: '아직 이 학년의 문제가 준비되지 않았어요. 선생님께 알려 주세요.', code: 'NO_QUESTIONS' }, 503);
   }
-  const nonsenseAvailable = (await countNonsense(sql, seat.grade)) > 0;
-  return json({ ok: true, nonsenseAvailable });
+  return json({ ok: true, regularAvailable, nonsenseAvailable });
 });
 
 export const config = { path: '/api/student/check' };

@@ -3,7 +3,7 @@
 
   const $ = (sel) => document.querySelector(sel);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const FAIL_RETURN_SECONDS = 5;
+  const RETURN_SECONDS = 5; // 수료/미수료 안내 후 처음 화면으로 자동 이동
 
   const state = {
     config: null,
@@ -11,16 +11,13 @@
     classNo: null,
     number: null,
     token: null,
-    mode: 'quiz',          // 'nonsense' | 'quiz'
-    questions: [],         // 정규 퀴즈 5문제
+    track: null,           // 'regular'(일반 퀴즈) | 'nonsense'(넌센스 퀴즈)
+    questions: [],         // 5문제 (일반/넌센스 공통)
     answers: [],
     index: 0,
-    nonsense: [],          // 넌센스 문제(선택 시)
-    nIndex: 0,
-    nRevealed: false,
     inProgress: false,
   };
-  let failTimer = null;
+  let returnTimer = null;
 
   function show(name) {
     document.querySelectorAll('.screen').forEach((el) => {
@@ -101,15 +98,20 @@
     $('#seat-confirm').disabled = !ready;
   }
 
-  // ---------- 3) 확인 → 넌센스 선택 → 5초 안내 → 시작 ----------
-  function askNonsense(available) {
+  // ---------- 3) 번호 확인 → 퀴즈 종류 선택 → 5초 안내 → 시작 ----------
+  // 넌센스 / 일반 중 학생이 직접 고른다. 준비되지 않은 쪽은 눌러지지 않는다. (처음 화면으로 → null)
+  function chooseTrack(check) {
     return new Promise((resolve) => {
-      $('#nonsense-note').hidden = available;
-      $('#nonsense-yes').hidden = !available;
-      $('#nonsense-no').textContent = available ? '아니요, 바로 퀴즈 풀래요' : '퀴즈 시작하기';
-      $('#nonsense-yes').onclick = () => resolve(true);
-      $('#nonsense-no').onclick = () => resolve(false);
-      show('nonsense-ask');
+      const setup = (sel, available, desc, track) => {
+        const b = $(sel);
+        b.disabled = !available;
+        b.querySelector('small').textContent = available ? desc : '아직 준비 중이에요';
+        b.onclick = () => resolve(track);
+      };
+      setup('#track-nonsense', check.nonsenseAvailable === true, '재미있는 말장난 문제 5개', 'nonsense');
+      setup('#track-regular', check.regularAvailable === true, '교과 문제 5개 (객관식 3 + O X 2)', 'regular');
+      $('#track-home').onclick = () => resolve(null);
+      show('track');
     });
   }
 
@@ -118,7 +120,8 @@
     $('#seat-confirm').disabled = true;
     try {
       const check = await post('/api/student/check', seat);
-      const wantNonsense = await askNonsense(check.nonsenseAvailable === true);
+      const track = await chooseTrack(check);
+      if (!track) { reset(); return; }
 
       show('countdown');
       for (let n = 5; n >= 1; n--) {
@@ -126,15 +129,14 @@
         await sleep(1000);
       }
 
-      const data = await post('/api/student/start', { ...seat, wantNonsense });
+      const data = await post('/api/student/start', { ...seat, track });
       state.token = data.token;
+      state.track = data.track === 'nonsense' ? 'nonsense' : 'regular';
       state.questions = data.questions;
       state.answers = new Array(data.questions.length).fill(null);
       state.index = 0;
-      state.nonsense = data.nonsense || [];
-      state.nIndex = 0;
       state.inProgress = true;
-      if (state.nonsense.length) renderNonsense(); else renderQuestion();
+      renderQuestion();
     } catch (e) {
       showBlocked(e);
     } finally {
@@ -151,65 +153,31 @@
     show('blocked');
   }
 
-  // ---------- 문제 화면 공통 ----------
+  // ---------- 문제 풀이 (일반 / 넌센스 공통: 정답은 제출 후 서버가 채점) ----------
   const typeLabel = (q) => (q.type === 'ox' ? 'O X 퀴즈' : '객관식');
   const optionLabel = (q, text, i) => (q.type === 'ox' ? text : `${i + 1}. ${text}`);
 
-  function drawHeader(q, index, total, tag) {
+  function renderQuestion() {
+    const q = state.questions[state.index];
+    const total = state.questions.length;
+    const nonsense = state.track === 'nonsense';
+
     $('#progress').replaceChildren(
       ...Array.from({ length: total }, (_, i) => {
         const s = document.createElement('span');
-        if (i <= index) s.className = 'done';
+        if (i <= state.index) s.className = 'done';
         return s;
       }),
     );
-    $('#q-subject').textContent = q.subject;
-    $('#q-type').textContent = `${tag}${index + 1} / ${total} · ${typeLabel(q)}`;
+    const subject = $('#q-subject');
+    subject.textContent = nonsense ? '넌센스' : q.subject;
+    subject.className = nonsense ? 'chip nonsense' : 'chip';
+    $('#q-type').textContent = `${state.index + 1} / ${total} · ${typeLabel(q)}`;
     $('#q-body').textContent = q.body;
     $('#quiz-error').hidden = true;
-    $('#q-feedback').hidden = true;
+
     const box = $('#q-options');
     box.className = `options ${q.type}`;
-    return box;
-  }
-
-  // ---------- 넌센스 라운드 (수료와 무관, 바로 정답 확인) ----------
-  function renderNonsense() {
-    state.mode = 'nonsense';
-    state.nRevealed = false;
-    const q = state.nonsense[state.nIndex];
-    const box = drawHeader(q, state.nIndex, state.nonsense.length, '넌센스 ');
-    box.replaceChildren(
-      ...q.choices.map((text, i) => button(optionLabel(q, text, i), 'option', () => revealNonsense(q, i, box))),
-    );
-    $('#q-next').textContent = state.nIndex === state.nonsense.length - 1 ? '퀴즈 시작하기' : '다음 넌센스';
-    $('#q-next').disabled = true;
-    show('quiz');
-  }
-
-  function revealNonsense(q, picked, box) {
-    if (state.nRevealed) return;
-    state.nRevealed = true;
-    [...box.children].forEach((b, j) => {
-      b.disabled = true;
-      if (j === q.answer) b.classList.add('correct');
-      else if (j === picked) b.classList.add('wrong');
-    });
-    const fb = $('#q-feedback');
-    fb.textContent = picked === q.answer
-      ? '딩동댕! 정답이에요 🎉'
-      : `아쉬워요! 정답은 "${q.choices[q.answer]}"이에요.`;
-    fb.className = `feedback ${picked === q.answer ? 'good' : 'bad'}`;
-    fb.hidden = false;
-    $('#q-next').disabled = false;
-  }
-
-  // ---------- 정규 퀴즈 ----------
-  function renderQuestion() {
-    state.mode = 'quiz';
-    const q = state.questions[state.index];
-    const total = state.questions.length;
-    const box = drawHeader(q, state.index, total, '');
     box.replaceChildren(
       ...q.choices.map((text, i) => {
         const b = button(optionLabel(q, text, i), 'option', () => {
@@ -227,16 +195,6 @@
   }
 
   async function nextOrSubmit() {
-    if (state.mode === 'nonsense') {
-      if (state.nIndex < state.nonsense.length - 1) {
-        state.nIndex += 1;
-        renderNonsense();
-      } else {
-        renderQuestion();
-      }
-      return;
-    }
-
     if (state.index < state.questions.length - 1) {
       state.index += 1;
       renderQuestion();
@@ -248,6 +206,7 @@
       state.inProgress = false;
       if (result.completed) {
         $('#done-seat').textContent = seatText();
+        startReturnTimer($('#done-timer'));
         show('done');
       } else {
         showFail(result);
@@ -260,24 +219,28 @@
     }
   }
 
-  // ---------- 틀렸을 때: 안내 후 첫 화면으로 ----------
-  function showFail(result) {
-    $('#fail-score').textContent = `${result.total}문제 중 ${result.score}문제를 맞혔어요.`;
-    let left = FAIL_RETURN_SECONDS;
-    const label = () => { $('#fail-timer').textContent = `${left}초 뒤에 처음 화면으로 돌아가요.`; };
+  // ---------- 수료 / 미수료 후: 안내 → 5초 뒤 처음 화면으로 (버튼으로 바로 이동도 가능) ----------
+  function startReturnTimer(labelEl) {
+    clearInterval(returnTimer);
+    let left = RETURN_SECONDS;
+    const label = () => { labelEl.textContent = `${left}초 뒤에 처음 화면으로 돌아가요.`; };
     label();
-    show('fail');
-    clearInterval(failTimer);
-    failTimer = setInterval(() => {
+    returnTimer = setInterval(() => {
       left -= 1;
       if (left <= 0) reset(); else label();
     }, 1000);
   }
 
+  function showFail(result) {
+    $('#fail-score').textContent = `${result.total}문제 중 ${result.score}문제를 맞혔어요.`;
+    startReturnTimer($('#fail-timer'));
+    show('fail');
+  }
+
   // ---------- 처음으로 ----------
   function reset() {
-    clearInterval(failTimer);
-    state.grade = state.classNo = state.number = state.token = null;
+    clearInterval(returnTimer);
+    state.grade = state.classNo = state.number = state.token = state.track = null;
     state.inProgress = false;
     renderGrades();
   }
@@ -290,6 +253,7 @@
   $('#seat-back').addEventListener('click', reset);
   $('#blocked-home').addEventListener('click', reset);
   $('#fail-home').addEventListener('click', reset);
+  $('#done-home').addEventListener('click', reset);
   $('#q-next').addEventListener('click', nextOrSubmit);
 
   (async () => {

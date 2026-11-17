@@ -25,7 +25,7 @@ function fakeSql(strings, ...v) {
   if (q.startsWith('SELECT count(*)::int AS n FROM questions')) {
     return ok([{ n: db.questions.filter((x) => x.grade === v[0] && x.category === 'nonsense' && x.is_active).length }]);
   }
-  if (q.startsWith('SELECT id, type, subject, body, choices, answer FROM questions') && q.includes("'nonsense'")) {
+  if (q.startsWith("SELECT id, type, subject, body, choices FROM questions WHERE grade = ? AND category = 'nonsense'")) {
     return ok(db.questions.filter((x) => x.grade === v[0] && x.category === 'nonsense' && x.is_active).slice(0, v[1]));
   }
   if (q.startsWith('INSERT INTO attempts')) {
@@ -121,7 +121,7 @@ test('권한 없으면 관리자 API 거부', async () => {
   }
 });
 
-test('문항 등록 → 풀이 → 오답 시 재도전 가능 → 수료 후 차단 → 관리자 승인 후 재참여', async () => {
+test('문항 등록 → 일반/넌센스 선택 → 오답 시 재도전 → 어느 쪽이든 전부 정답이면 수료 → 승인 후 재참여', async () => {
   const admin = await adminToken();
   const questions = await h('admin-questions');
   const check = await h('student-check');
@@ -132,6 +132,7 @@ test('문항 등록 → 풀이 → 오답 시 재도전 가능 → 수료 후 �
 
   const seat = { grade: 2, classNo: 3, number: 15 };
   assert.equal((await call(check, 'POST', '/', seat)).status, 503); // 문항 없음
+  assert.equal((await call(start, 'POST', '/', { ...seat, track: 'nonsense' })).status, 503);
 
   const subjects = ['국어', '수학', '사회', '과학', '영어'];
   for (let i = 0; i < 2; i++) {
@@ -146,23 +147,28 @@ test('문항 등록 → 풀이 → 오답 시 재도전 가능 → 수료 후 �
   assert.equal((await call(check, 'POST', '/', { grade: 3, classNo: 5, number: 1 })).status, 400);
   assert.equal((await call(check, 'POST', '/', { grade: 2, classNo: 1, number: 31 })).status, 400);
 
-  // 넌센스 문항이 없으면 nonsenseAvailable=false
+  // 넌센스 문항이 없으면 일반만 선택 가능
   const c1 = await (await call(check, 'POST', '/', seat)).json();
-  assert.deepEqual([c1.ok, c1.nonsenseAvailable], [true, false]);
+  assert.deepEqual([c1.ok, c1.regularAvailable, c1.nonsenseAvailable], [true, true, false]);
+  assert.equal((await call(start, 'POST', '/', { ...seat, track: 'nonsense' })).status, 503); // 준비 안 된 쪽은 시작 불가
 
-  // 넌센스 문항 추가 (교과는 자동으로 '넌센스')
+  // 넌센스 문항 추가 (교과는 자동으로 '넌센스'). 5개가 되어야 선택 가능
   const n1 = await (await call(questions, 'POST', '/', { grade: 2, category: 'nonsense', type: 'mc', body: '세상에서 가장 뜨거운 바다는?', choices: ['열바다', '동해', '서해', '남해'], answer: 0 }, admin)).json();
   assert.equal(n1.question.subject, '넌센스');
+  for (let i = 0; i < 3; i++) {
+    assert.equal((await call(questions, 'POST', '/', { grade: 2, category: 'nonsense', type: 'mc', body: `넌센스 mc${i}`, choices: ['가', '나', '다', '라'], answer: i }, admin)).status, 201);
+  }
+  assert.equal((await (await call(check, 'POST', '/', seat)).json()).nonsenseAvailable, false); // 4개: 아직 부족
   assert.equal((await call(questions, 'POST', '/', { grade: 2, category: 'nonsense', type: 'ox', body: '넌센스 OX', answer: 1 }, admin)).status, 201);
   const c2 = await (await call(check, 'POST', '/', seat)).json();
-  assert.equal(c2.nonsenseAvailable, true);
+  assert.deepEqual([c2.regularAvailable, c2.nonsenseAvailable], [true, true]);
 
-  // 1차 도전: 넌센스 선택 안 함
-  const s1 = await (await call(start, 'POST', '/', { ...seat, wantNonsense: false })).json();
+  // 1차 도전: 일반 퀴즈 (track 생략 = 일반)
+  const s1 = await (await call(start, 'POST', '/', seat)).json();
+  assert.equal(s1.track, 'regular');
   assert.equal(s1.questions.length, 5);
   assert.deepEqual(s1.questions.map((q) => q.type), ['mc', 'ox', 'mc', 'ox', 'mc']);
-  assert.ok(s1.questions.every((q) => !('answer' in q) && !db.questions.find((x) => x.id === q.id && x.category === 'nonsense')));
-  assert.deepEqual(s1.nonsense, []);
+  assert.ok(s1.questions.every((q) => !('answer' in q) && db.questions.find((x) => x.id === q.id).category === 'regular'));
 
   // 오답 → 미수료
   const wrong = correctAnswersFor(s1.questions);
@@ -172,33 +178,51 @@ test('문항 등록 → 풀이 → 오답 시 재도전 가능 → 수료 후 �
   assert.equal((await call(submit, 'POST', '/', { token: s1.token, answers: wrong })).status, 409); // 재제출 불가
   assert.equal((await call(submit, 'POST', '/', { token: 'forged.token', answers: wrong })).status, 401);
 
-  // 미수료 학생은 승인 없이 재도전 가능 (몇 번이든) — 2차: 넌센스 선택
+  // 2차 도전: 넌센스 퀴즈 선택 → 5문제, 정답은 내려오지 않음, 오답이면 미수료
   assert.equal((await call(check, 'POST', '/', seat)).status, 200);
-  const s2 = await (await call(start, 'POST', '/', { ...seat, wantNonsense: true })).json();
-  assert.equal(s2.nonsense.length, 2);
-  assert.ok(s2.nonsense.every((q) => 'answer' in q)); // 넌센스는 즉시 정답 확인용으로 정답 포함
+  const s2 = await (await call(start, 'POST', '/', { ...seat, track: 'nonsense' })).json();
+  assert.equal(s2.track, 'nonsense');
+  assert.equal(s2.questions.length, 5);
+  assert.equal(new Set(s2.questions.map((q) => q.id)).size, 5);
+  assert.ok(s2.questions.every((q) => !('answer' in q) && db.questions.find((x) => x.id === q.id).category === 'nonsense'));
+  assert.ok(s2.questions.every((q) => q.subject === '넌센스'));
+  const wrongN = correctAnswersFor(s2.questions);
+  wrongN[2] = (wrongN[2] + 1) % (s2.questions[2].type === 'ox' ? 2 : 4);
+  const f2 = await (await call(submit, 'POST', '/', { token: s2.token, answers: wrongN })).json();
+  assert.deepEqual([f2.score, f2.completed], [4, false]);
 
-  // 3차 도전을 시작하면 2차 토큰은 무효
-  const s3 = await (await call(start, 'POST', '/', { ...seat, wantNonsense: false })).json();
-  const stale = await call(submit, 'POST', '/', { token: s2.token, answers: correctAnswersFor(s3.questions) });
+  // 3차 도전을 시작하면 이전 토큰은 무효 (알 수 없는 track 값은 일반으로 처리)
+  const s3 = await (await call(start, 'POST', '/', { ...seat, track: 'nonsense' })).json();
+  const s4 = await (await call(start, 'POST', '/', { ...seat, track: 'whatever' })).json();
+  assert.equal(s4.track, 'regular');
+  const stale = await call(submit, 'POST', '/', { token: s3.token, answers: correctAnswersFor(s3.questions) });
   assert.equal(stale.status, 409);
 
   let list = (await (await call(attempts, 'GET', '/', undefined, admin)).json()).attempts;
-  assert.deepEqual([list[0].status, list[0].attempt_count], ['started', 3]);
+  assert.deepEqual([list[0].status, list[0].attempt_count], ['started', 4]);
 
-  // 모두 정답 → 수료
-  const done = await (await call(submit, 'POST', '/', { token: s3.token, answers: correctAnswersFor(s3.questions) })).json();
+  // 일반 퀴즈를 모두 맞히면 수료
+  const done = await (await call(submit, 'POST', '/', { token: s4.token, answers: correctAnswersFor(s4.questions) })).json();
   assert.deepEqual([done.score, done.completed], [5, true]);
 
-  // 수료자는 차단
+  // 수료자는 (넌센스를 고르더라도) 차단
   assert.equal((await call(check, 'POST', '/', seat)).status, 409);
   assert.equal((await call(start, 'POST', '/', seat)).status, 409);
+  assert.equal((await call(start, 'POST', '/', { ...seat, track: 'nonsense' })).status, 409);
   list = (await (await call(attempts, 'GET', '/', undefined, admin)).json()).attempts;
   assert.equal(list[0].status, 'completed');
 
   // 관리자 승인(기록 삭제) 후 다시 참여 가능
   assert.equal((await (await call(reset, 'POST', '/', seat, admin)).json()).removed, 1);
   assert.equal((await call(check, 'POST', '/', seat)).status, 200);
+
+  // 승인 후에는 넌센스 퀴즈를 모두 맞혀도 수료 (넌센스도 수료로 인정)
+  const s5 = await (await call(start, 'POST', '/', { ...seat, track: 'nonsense' })).json();
+  const done2 = await (await call(submit, 'POST', '/', { token: s5.token, answers: correctAnswersFor(s5.questions) })).json();
+  assert.deepEqual([done2.score, done2.completed], [5, true]);
+  list = (await (await call(attempts, 'GET', '/', undefined, admin)).json()).attempts;
+  assert.equal(list[0].status, 'completed');
+  assert.equal((await call(check, 'POST', '/', seat)).status, 409);
 
   // 문항 삭제(비활성화)
   assert.equal((await (await call(questions, 'DELETE', '/?id=1', undefined, admin)).json()).removed, 1);

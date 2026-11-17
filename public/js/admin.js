@@ -20,6 +20,8 @@
     bulkRows: null,
   };
 
+  const NONSENSE_NEEDED = 5; // 넌센스 퀴즈는 학년마다 5개 이상 있어야 학생이 고를 수 있음
+
   const STATUS_LABEL = { started: '풀이 중/중단', completed: '수료', failed: '미수료' };
 
   // ---------- 공통 ----------
@@ -263,16 +265,19 @@
     const mc = regular.filter((q) => q.type === 'mc').length;
     const nonsense = list.length - regular.length;
     $('#q-counts').replaceChildren(
-      el('span', { class: 'badge' }, `정규 O X ${ox}개`),
-      el('span', { class: 'badge' }, `정규 객관식 ${mc}개`),
+      el('span', { class: 'badge' }, `일반 O X ${ox}개`),
+      el('span', { class: 'badge' }, `일반 객관식 ${mc}개`),
       el('span', { class: 'badge' }, `넌센스 ${nonsense}개`),
     );
     const warn = $('#q-warn');
+    const notes = [];
     const lacks = [];
-    if (ox < 2) lacks.push(`정규 O X 퀴즈 ${2 - ox}개`);
-    if (mc < 3) lacks.push(`정규 객관식 ${3 - mc}개`);
-    warn.hidden = lacks.length === 0;
-    if (lacks.length) warn.textContent = `출제하려면 ${lacks.join(', ')}가 더 필요해요. (정규 문제는 O X 2 + 객관식 3 고정)`;
+    if (ox < 2) lacks.push(`일반 O X 퀴즈 ${2 - ox}개`);
+    if (mc < 3) lacks.push(`일반 객관식 ${3 - mc}개`);
+    if (lacks.length) notes.push(`일반 퀴즈를 열려면 ${lacks.join(', ')}가 더 필요해요. (O X 2 + 객관식 3 고정)`);
+    if (nonsense < NONSENSE_NEEDED) notes.push(`넌센스 퀴즈를 열려면 ${NONSENSE_NEEDED - nonsense}개가 더 필요해요. (5문제 출제)`);
+    warn.hidden = notes.length === 0;
+    warn.replaceChildren(...notes.map((t) => el('div', {}, t)));
 
     $('#q-list').replaceChildren(
       ...list.map((q) => {
@@ -403,7 +408,7 @@
       } else if (r.count === 0) {
         box.append(el('p', { class: 'error-text' }, '등록할 문항이 없어요.'));
       } else {
-        box.append(el('p', {}, `검사 완료! 정규 ${r.regular}개, 넌센스 ${r.nonsense}개 (총 ${r.count}개)를 등록할 수 있어요.`));
+        box.append(el('p', {}, `검사 완료! 일반 ${r.regular}개, 넌센스 ${r.nonsense}개 (총 ${r.count}개)를 등록할 수 있어요.`));
         state.bulkRows = rows;
         $('#bulk-submit').hidden = false;
       }

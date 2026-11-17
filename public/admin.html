@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex, nofollow">
   <title>관리자 · 학년 마무리 퀴즈</title>
   <link rel="stylesheet" href="/css/style.css">
@@ -21,13 +21,17 @@
         <p class="error-text" id="login-error" hidden></p>
         <button class="btn" type="submit">들어가기</button>
       </form>
+      <a class="btn secondary" href="/" id="login-home" style="margin-top:10px">← 첫 화면으로</a>
     </section>
 
     <!-- 관리 화면 -->
     <div id="main-view" hidden>
       <div class="topbar">
         <h1>학년 마무리 퀴즈 · 관리자</h1>
-        <button class="btn secondary small" id="logout-btn">로그아웃</button>
+        <div class="topbar-actions">
+          <a class="btn secondary small" href="/" id="home-btn">🏠 첫 화면으로</a>
+          <button class="btn secondary small" id="logout-btn">로그아웃</button>
+        </div>
       </div>
 
       <div class="tabs" id="main-tabs">
@@ -43,7 +47,7 @@
         <div class="seat-grid" id="seat-grid"></div>
         <div class="legend">
           <span>⬜ 미참여</span><span>🟨 풀이 중/중단</span><span>🟩 수료</span><span>🟥 미수료</span>
-          <span>· 수료한 번호를 누르면 재참여를 승인할 수 있어요. (미수료는 승인 없이 계속 도전)</span>
+          <span>· 일반/넌센스 퀴즈 중 어느 쪽이든 5문제를 모두 맞히면 수료예요. 수료한 번호를 누르면 재참여를 승인할 수 있어요. (미수료는 승인 없이 계속 도전)</span>
         </div>
       </section>
 
@@ -74,8 +78,8 @@
           <div class="field">
             <div class="step-title"><span class="num">2</span>구분 선택</div>
             <div class="seg-group">
-              <label class="seg"><input type="radio" name="category" value="regular" checked><span>정규 문제 (수료 판정)</span></label>
-              <label class="seg"><input type="radio" name="category" value="nonsense"><span>넌센스 문제 (재미용)</span></label>
+              <label class="seg"><input type="radio" name="category" value="regular" checked><span>일반 퀴즈 문제</span></label>
+              <label class="seg"><input type="radio" name="category" value="nonsense"><span>넌센스 퀴즈 문제</span></label>
             </div>
           </div>
 

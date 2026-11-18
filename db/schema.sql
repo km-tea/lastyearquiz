@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS questions (
   id         SERIAL PRIMARY KEY,
-  grade      SMALLINT    NOT NULL CHECK (grade BETWEEN 1 AND 6),
+  grade      SMALLINT    NOT NULL CHECK (grade BETWEEN 1 AND 6),  -- 넌센스(category='nonsense')는 모든 학년 공통: 값은 1로 채우고 출제 때 무시
   category   TEXT        NOT NULL DEFAULT 'regular' CHECK (category IN ('regular', 'nonsense')),
   type       TEXT        NOT NULL CHECK (type IN ('ox', 'mc')),
   subject    TEXT        NOT NULL DEFAULT '기타',

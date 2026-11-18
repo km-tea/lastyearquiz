@@ -273,9 +273,3 @@ body.student button { -webkit-user-select: none; user-select: none; }
 .pager { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
 .pager-info { font-weight: 800; font-size: 15px; min-width: 150px; text-align: center; }
 .q-no { font-weight: 800; color: var(--muted); font-size: 14px; }
-
-/* ---- 관리자: 등록된 문항 필터 (학년 › 과목 › 유형) ---- */
-#q-subjects, #q-types { margin-bottom: 8px; }
-#q-types .tab { background: #fbf7ec; border: 2px solid #efe6d3; }
-#q-types .tab.active { background: var(--primary); border-color: var(--primary); }
-.q-path { font-weight: 800; font-size: 15px; margin: 6px 0 2px; color: var(--ink); }

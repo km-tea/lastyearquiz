@@ -9,6 +9,9 @@ export const SUBJECTS = [
 export const QUIZ_LAYOUT = { ox: 2, mc: 3 }; // 정규 퀴즈: 총 5문제
 export const NONSENSE_COUNT = 5;             // 넌센스 퀴즈 문제 수 (일반 퀴즈처럼 모두 맞히면 수료)
 export const NONSENSE_SUBJECT = '넌센스';
+// 넌센스 퀴즈는 모든 학년이 함께 푸는 공통 문제다. DB의 grade 칸은 비워 둘 수 없어서 1로 채워 저장하고,
+// 출제·집계할 때는 이 값을 보지 않는다.
+export const NONSENSE_GRADE = 1;
 export const CATEGORIES = ['regular', 'nonsense'];
 export const ALREADY_MESSAGE = '이미 수료를 완료했어요. 다시 참여하려면 선생님께 말씀드려 주세요.';
 
@@ -32,11 +35,15 @@ export function parseSeat(input) {
 
 // 관리자 문항 입력 검증 (화면 입력/엑셀 업로드 공통)
 export function validateQuestion(input) {
-  const grade = toInt(input?.grade);
-  if (!CLASSES_PER_GRADE[grade]) return { error: '학년을 확인해 주세요.' };
-
   const category = input?.category ?? 'regular';
   if (!CATEGORIES.includes(category)) return { error: '구분(정규/넌센스)을 확인해 주세요.' };
+
+  // 일반(정규) 문항은 학년별, 넌센스 문항은 학년과 무관(공통)
+  let grade = NONSENSE_GRADE;
+  if (category === 'regular') {
+    grade = toInt(input?.grade);
+    if (!CLASSES_PER_GRADE[grade]) return { error: '학년을 확인해 주세요.' };
+  }
 
   const type = input?.type;
   if (type !== 'ox' && type !== 'mc') return { error: '문제 유형을 선택해 주세요.' };

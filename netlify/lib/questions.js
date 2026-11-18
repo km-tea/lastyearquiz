@@ -1,6 +1,6 @@
 import { NONSENSE_COUNT } from './config.js';
 
-// 일반(정규) 퀴즈 문제 풀
+// 일반(정규) 퀴즈 문제 풀: 학년별
 export async function loadPool(sql, grade) {
   return sql`
     SELECT id, type, subject, body, choices
@@ -8,20 +8,25 @@ export async function loadPool(sql, grade) {
     WHERE grade = ${grade} AND category = 'regular' AND is_active = TRUE`;
 }
 
-export async function countNonsense(sql, grade) {
+// 넌센스 퀴즈 문제 풀: 모든 학년 공통. (같은 문제가 여러 번 등록돼 있어도 한 번만 센다)
+export async function countNonsense(sql) {
   const [row] = await sql`
-    SELECT count(*)::int AS n
+    SELECT count(DISTINCT body)::int AS n
     FROM questions
-    WHERE grade = ${grade} AND category = 'nonsense' AND is_active = TRUE`;
+    WHERE category = 'nonsense' AND is_active = TRUE`;
   return row?.n ?? 0;
 }
 
-// 넌센스 퀴즈: 무작위로 NONSENSE_COUNT(5)문제. 일반 퀴즈와 똑같이 정답은 내려보내지 않는다.
-export async function loadNonsense(sql, grade) {
+// 넌센스 퀴즈: 공통 문제 중 무작위로 NONSENSE_COUNT(5)문제. 일반 퀴즈와 똑같이 정답은 내려보내지 않는다.
+export async function loadNonsense(sql) {
   return sql`
     SELECT id, type, subject, body, choices
-    FROM questions
-    WHERE grade = ${grade} AND category = 'nonsense' AND is_active = TRUE
+    FROM (
+      SELECT DISTINCT ON (body) id, type, subject, body, choices
+      FROM questions
+      WHERE category = 'nonsense' AND is_active = TRUE
+      ORDER BY body, id
+    ) q
     ORDER BY random()
     LIMIT ${NONSENSE_COUNT}`;
 }

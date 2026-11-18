@@ -6,6 +6,7 @@ process.env.LOGIN_FAIL_DELAY_MS = '0';
 delete process.env.ADMIN_CODE; // 기본 코드 0227 확인
 
 const { setSqlForTests } = await import('../netlify/lib/db.js');
+const { NONSENSE_GRADE } = await import('../netlify/lib/config.js');
 
 // ---- 아주 작은 메모리 DB (핸들러가 쓰는 쿼리만 흉내) ----
 const db = { questions: [], attempts: [], failures: [], qSeq: 1, aSeq: 1 };
@@ -22,11 +23,13 @@ function fakeSql(strings, ...v) {
   if (q.startsWith("SELECT id, type, subject, body, choices FROM questions WHERE grade = ? AND category = 'regular'")) {
     return ok(db.questions.filter((x) => x.grade === v[0] && x.category === 'regular' && x.is_active));
   }
-  if (q.startsWith('SELECT count(*)::int AS n FROM questions')) {
-    return ok([{ n: db.questions.filter((x) => x.grade === v[0] && x.category === 'nonsense' && x.is_active).length }]);
+  if (q.startsWith('SELECT count(DISTINCT body)::int AS n FROM questions')) {
+    return ok([{ n: new Set(db.questions.filter((x) => x.category === 'nonsense' && x.is_active).map((x) => x.body)).size }]);
   }
-  if (q.startsWith("SELECT id, type, subject, body, choices FROM questions WHERE grade = ? AND category = 'nonsense'")) {
-    return ok(db.questions.filter((x) => x.grade === v[0] && x.category === 'nonsense' && x.is_active).slice(0, v[1]));
+  if (q.startsWith('SELECT id, type, subject, body, choices FROM ( SELECT DISTINCT ON (body)')) {
+    const seen = new Set();
+    const rows = db.questions.filter((x) => x.category === 'nonsense' && x.is_active && !seen.has(x.body) && seen.add(x.body));
+    return ok(rows.slice(0, v[0]));
   }
   if (q.startsWith('INSERT INTO attempts')) {
     const ids = parseArr(v[3]);
@@ -71,7 +74,7 @@ function fakeSql(strings, ...v) {
     return ok([]);
   }
   if (q.startsWith('SELECT id, grade, category, type, subject, body, choices, answer FROM questions WHERE grade =')) {
-    return ok(db.questions.filter((x) => x.grade === v[0] && x.is_active));
+    return ok(db.questions.filter((x) => x.grade === v[0] && x.category === 'regular' && x.is_active));
   }
   if (q.startsWith('UPDATE questions SET is_active = FALSE')) {
     const x = db.questions.find((r) => r.id === v[0] && r.is_active);
@@ -152,16 +155,25 @@ test('문항 등록 → 일반/넌센스 선택 → 오답 시 재도전 → 어
   assert.deepEqual([c1.ok, c1.regularAvailable, c1.nonsenseAvailable], [true, true, false]);
   assert.equal((await call(start, 'POST', '/', { ...seat, track: 'nonsense' })).status, 503); // 준비 안 된 쪽은 시작 불가
 
-  // 넌센스 문항 추가 (교과는 자동으로 '넌센스'). 5개가 되어야 선택 가능
-  const n1 = await (await call(questions, 'POST', '/', { grade: 2, category: 'nonsense', type: 'mc', body: '세상에서 가장 뜨거운 바다는?', choices: ['열바다', '동해', '서해', '남해'], answer: 0 }, admin)).json();
+  // 넌센스 문항 추가: 학년 없이 등록하는 모든 학년 공통 문제 (교과는 자동으로 '넌센스'). 5개가 되어야 선택 가능
+  assert.equal((await call(questions, 'POST', '/', { type: 'ox', subject: '수학', body: '학년 없는 일반 문항', answer: 0 }, admin)).status, 400); // 일반 문항은 학년 필수
+  const n1 = await (await call(questions, 'POST', '/', { category: 'nonsense', type: 'mc', body: '세상에서 가장 뜨거운 바다는?', choices: ['열바다', '동해', '서해', '남해'], answer: 0 }, admin)).json();
   assert.equal(n1.question.subject, '넌센스');
+  assert.equal(n1.question.grade, NONSENSE_GRADE); // 학년 칸은 의미 없는 값으로 채워 저장
   for (let i = 0; i < 3; i++) {
-    assert.equal((await call(questions, 'POST', '/', { grade: 2, category: 'nonsense', type: 'mc', body: `넌센스 mc${i}`, choices: ['가', '나', '다', '라'], answer: i }, admin)).status, 201);
+    assert.equal((await call(questions, 'POST', '/', { category: 'nonsense', type: 'mc', body: `넌센스 mc${i}`, choices: ['가', '나', '다', '라'], answer: i }, admin)).status, 201);
   }
-  assert.equal((await (await call(check, 'POST', '/', seat)).json()).nonsenseAvailable, false); // 4개: 아직 부족
-  assert.equal((await call(questions, 'POST', '/', { grade: 2, category: 'nonsense', type: 'ox', body: '넌센스 OX', answer: 1 }, admin)).status, 201);
+  // 같은 문제를 또 등록(예: 학년마다 따로 올린 경우)해도 한 번만 센다 → 아직 4개
+  assert.equal((await call(questions, 'POST', '/', { grade: 4, category: 'nonsense', type: 'mc', body: '세상에서 가장 뜨거운 바다는?', choices: ['열바다', '동해', '서해', '남해'], answer: 0 }, admin)).status, 201);
+  assert.equal((await (await call(check, 'POST', '/', seat)).json()).nonsenseAvailable, false); // 서로 다른 문제 4개: 아직 부족
+  assert.equal((await call(questions, 'POST', '/', { category: 'nonsense', type: 'ox', body: '넌센스 OX', answer: 1 }, admin)).status, 201);
   const c2 = await (await call(check, 'POST', '/', seat)).json();
   assert.deepEqual([c2.regularAvailable, c2.nonsenseAvailable], [true, true]);
+
+  // 다른 학년 학생: 일반 퀴즈는 학년별이라 문제가 없지만, 넌센스는 공통이라 바로 선택 가능
+  const seat5 = { grade: 5, classNo: 1, number: 1 };
+  const c5 = await (await call(check, 'POST', '/', seat5)).json();
+  assert.deepEqual([c5.regularAvailable, c5.nonsenseAvailable], [false, true]);
 
   // 1차 도전: 일반 퀴즈 (track 생략 = 일반)
   const s1 = await (await call(start, 'POST', '/', seat)).json();
@@ -224,6 +236,15 @@ test('문항 등록 → 일반/넌센스 선택 → 오답 시 재도전 → 어
   assert.equal(list[0].status, 'completed');
   assert.equal((await call(check, 'POST', '/', seat)).status, 409);
 
+  // 5학년 학생도 같은 공통 넌센스 문제 풀에서 5문제(중복 없음)를 받고, 일반 퀴즈는 5학년 문제가 없어 시작 불가
+  assert.equal((await call(start, 'POST', '/', { ...seat5, track: 'regular' })).status, 503);
+  const s6 = await (await call(start, 'POST', '/', { ...seat5, track: 'nonsense' })).json();
+  assert.equal(s6.questions.length, 5);
+  assert.equal(new Set(s6.questions.map((q) => q.body)).size, 5);
+  assert.ok(s6.questions.every((q) => !('answer' in q) && db.questions.find((x) => x.id === q.id).category === 'nonsense'));
+  const done6 = await (await call(submit, 'POST', '/', { token: s6.token, answers: correctAnswersFor(s6.questions) })).json();
+  assert.deepEqual([done6.score, done6.completed], [5, true]); // 다른 학년도 넌센스로 수료
+
   // 문항 삭제(비활성화)
   assert.equal((await (await call(questions, 'DELETE', '/?id=1', undefined, admin)).json()).removed, 1);
 });
@@ -236,7 +257,7 @@ test('엑셀 일괄 등록: 미리보기 → 오류 시 전체 거부 → 정상
   const good = [
     { 학년: 5, 구분: '정규', 유형: '객관식', 교과: '수학', 문제: '12의 약수가 아닌 것은?', 보기1: 3, 보기2: 4, 보기3: 5, 보기4: 6, 정답: 3 },
     { 학년: '5학년', 구분: '', 유형: 'OX', 교과: '사회', 문제: '독도는 우리나라 영토이다.', 보기1: '', 보기2: '', 보기3: '', 보기4: '', 정답: 'O' },
-    { 학년: 5, 구분: '넌센스', 유형: 'O X 퀴즈', 교과: '', 문제: '넌센스 OX', 정답: 'X' },
+    { 학년: '', 구분: '넌센스', 유형: 'O X 퀴즈', 교과: '', 문제: '넌센스 OX 공통', 정답: 'X' }, // 넌센스는 학년 비움
     { 학년: '', 구분: '', 유형: '', 교과: '', 문제: '', 정답: '' }, // 빈 줄은 무시
   ];
   const bad = [...good, { 학년: 7, 구분: '정규', 유형: '객관식', 교과: '수학', 문제: 'x', 보기1: 'a', 보기2: 'b', 보기3: 'c', 보기4: 'd', 정답: 1 }];
@@ -257,7 +278,7 @@ test('엑셀 일괄 등록: 미리보기 → 오류 시 전체 거부 → 정상
   assert.equal(saved.status, 201);
   assert.equal(db.questions.length, before + 3);
   const added = db.questions.slice(-3);
-  assert.deepEqual(added.map((q) => [q.grade, q.category, q.type, q.answer]), [[5, 'regular', 'mc', 2], [5, 'regular', 'ox', 0], [5, 'nonsense', 'ox', 1]]);
+  assert.deepEqual(added.map((q) => [q.grade, q.category, q.type, q.answer]), [[5, 'regular', 'mc', 2], [5, 'regular', 'ox', 0], [NONSENSE_GRADE, 'nonsense', 'ox', 1]]);
   assert.equal(added[2].subject, '넌센스');
 });
 

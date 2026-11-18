@@ -3,7 +3,8 @@ import { json, readJson, notAllowed, unauthorized, handleErrors } from '../lib/h
 import { requireAdmin } from '../lib/auth.js';
 import { validateQuestion } from '../lib/config.js';
 
-// GET ?grade=N : 문항 목록 / POST : 문항 1개 추가 / DELETE ?id=N : 문항 삭제(비활성화)
+// GET ?grade=N : 그 학년의 일반 문항 목록 (grade 없이 부르면 넌센스 포함 전체) / POST : 문항 1개 추가 / DELETE ?id=N : 문항 삭제(비활성화)
+// 넌센스 문항은 모든 학년 공통이라 학년 없이 등록한다.
 export default handleErrors(async (req) => {
   if (!requireAdmin(req)) return unauthorized();
   const sql = await getSql();
@@ -14,10 +15,10 @@ export default handleErrors(async (req) => {
     const questions = Number.isInteger(grade) && grade >= 1 && grade <= 6
       ? await sql`
           SELECT id, grade, category, type, subject, body, choices, answer
-          FROM questions WHERE grade = ${grade} AND is_active = TRUE ORDER BY id`
+          FROM questions WHERE grade = ${grade} AND category = 'regular' AND is_active = TRUE ORDER BY id`
       : await sql`
           SELECT id, grade, category, type, subject, body, choices, answer
-          FROM questions WHERE is_active = TRUE ORDER BY grade, id`;
+          FROM questions WHERE is_active = TRUE ORDER BY id`;
     return json({ questions });
   }
 

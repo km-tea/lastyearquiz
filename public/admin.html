@@ -71,17 +71,18 @@
           <h3>문항 하나씩 추가</h3>
 
           <div class="field">
-            <div class="step-title"><span class="num">1</span>학년 선택</div>
-            <select id="q-grade-select"></select>
-          </div>
-
-          <div class="field">
-            <div class="step-title"><span class="num">2</span>구분 선택</div>
+            <div class="step-title"><span class="num">1</span>구분 선택</div>
             <div class="seg-group">
-              <label class="seg"><input type="radio" name="category" value="regular" checked><span>일반 퀴즈 문제</span></label>
-              <label class="seg"><input type="radio" name="category" value="nonsense"><span>넌센스 퀴즈 문제</span></label>
+              <label class="seg"><input type="radio" name="category" value="regular" checked><span>일반 퀴즈 문제 (학년별)</span></label>
+              <label class="seg"><input type="radio" name="category" value="nonsense"><span>넌센스 퀴즈 문제 (모든 학년 공통)</span></label>
             </div>
           </div>
+
+          <div class="field" id="grade-field">
+            <div class="step-title"><span class="num">2</span>학년 선택</div>
+            <select id="q-grade-select"></select>
+          </div>
+          <p class="muted" id="common-note" hidden>🌐 넌센스 퀴즈는 모든 학년이 함께 푸는 <strong>공통 문제</strong>예요. 학년은 고르지 않아도 돼요.</p>
 
           <div class="field">
             <div class="step-title"><span class="num">3</span>형식 선택</div>
@@ -123,15 +124,11 @@
 
         <!-- 등록된 문항 -->
         <h3 style="margin-top:28px">등록된 문항</h3>
-        <!-- ① 학년 → ② 과목 → ③ 유형 순서로 좁혀 가며 확인 -->
         <div class="tabs" id="q-grades"></div>
-        <div class="tabs sub" id="q-subjects"></div>
-        <div class="tabs sub" id="q-types"></div>
         <div class="summary" id="q-counts"></div>
         <div class="warn-box" id="q-warn" hidden></div>
-        <div class="q-path" id="q-path"></div>
         <div id="q-pager-top"></div>
-        <p class="muted" id="q-empty" hidden></p>
+        <p class="muted" id="q-empty" hidden>이 학년에는 등록된 문항이 없어요.</p>
         <ul class="q-list" id="q-list"></ul>
         <div id="q-pager"></div>
       </section>

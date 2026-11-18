@@ -16,15 +16,14 @@
     statusClass: 1,
     qGrade: 1,
     qPage: 0,            // 등록된 문항 목록의 현재 쪽 (0부터)
-    qSubject: '',        // 과목 버튼 ('' = 그 학년 전체)
-    qType: '',           // 유형 버튼 ('' = 전체, 'mc' = 객관식, 'ox' = O,X)
     questions: [],
     dialogSeat: null,
     bulkRows: null,
   };
 
   const Q_PAGE_SIZE = 5;       // 등록된 문항 목록은 5개씩 넘겨 가며 보고 삭제
-  const NONSENSE_NEEDED = 5; // 넌센스 퀴즈는 학년마다 5개 이상 있어야 학생이 고를 수 있음
+  const NONSENSE_NEEDED = 5; // 넌센스 퀴즈(모든 학년 공통)는 전체 5개 이상 있어야 학생이 고를 수 있음
+  const NONSENSE_TAB = 0;    // '등록된 문항' 탭: 1~6 = 학년별 일반 문항, 0 = 넌센스(공통)
 
   const STATUS_LABEL = { started: '풀이 중/중단', completed: '수료', failed: '미수료' };
 
@@ -239,7 +238,10 @@
   function syncFormFields() {
     $('#mc-fields').hidden = checked('type') === 'ox';
     $('#ox-fields').hidden = checked('type') !== 'ox';
-    $('#subject-field').hidden = checked('category') === 'nonsense'; // 넌센스는 교과 없음
+    const nonsense = checked('category') === 'nonsense';
+    $('#subject-field').hidden = nonsense;   // 넌센스는 교과 없음
+    $('#grade-field').hidden = nonsense;     // 넌센스는 모든 학년 공통이라 학년 선택 없음
+    $('#common-note').hidden = !nonsense;
   }
   document.querySelectorAll('input[name="type"], input[name="category"]')
     .forEach((r) => r.addEventListener('change', syncFormFields));
@@ -247,84 +249,52 @@
   // 폼의 학년을 바꾸면 아래 '등록된 문항' 목록도 그 학년으로 맞춘다
   $('#q-grade-select').addEventListener('change', (e) => {
     state.qGrade = Number(e.target.value);
-    resetQuestionFilters();
+    state.qPage = 0;
     renderQuestions();
   });
 
-  // 학년을 바꾸면 과목/유형 선택은 '전체'로 돌아가고 첫 쪽부터 보여 준다
-  function resetQuestionFilters() {
-    state.qSubject = '';
-    state.qType = '';
-    state.qPage = 0;
-  }
-
   function renderQuestions() {
     const { grades } = state.config;
-    $('#q-grade-select').value = String(state.qGrade);
+    const isNonsenseTab = state.qGrade === NONSENSE_TAB;
+    if (!isNonsenseTab) $('#q-grade-select').value = String(state.qGrade);
+    const nonsenseAll = state.questions.filter((q) => q.category === 'nonsense');
+    const nonsenseKinds = new Set(nonsenseAll.map((q) => q.body)).size; // 같은 문제는 한 번만 센다 (서버와 동일)
+    const regularOf = (g) => state.questions.filter((q) => q.grade === g && q.category === 'regular');
 
     $('#q-grades').replaceChildren(
       ...grades.map((g) =>
         el('button', {
-          class: `tab${g.grade === state.qGrade ? ' active' : ''}`,
-          onclick: () => { state.qGrade = g.grade; resetQuestionFilters(); renderQuestions(); },
-        }, `${g.grade}학년`, el('small', {}, `${state.questions.filter((q) => q.grade === g.grade).length}문항`)),
+          class: `tab${!isNonsenseTab && g.grade === state.qGrade ? ' active' : ''}`,
+          onclick: () => { state.qGrade = g.grade; state.qPage = 0; renderQuestions(); },
+        }, `${g.grade}학년`, el('small', {}, `${regularOf(g.grade).length}문항`)),
       ),
+      el('button', {
+        class: `tab${isNonsenseTab ? ' active' : ''}`,
+        onclick: () => { state.qGrade = NONSENSE_TAB; state.qPage = 0; renderQuestions(); },
+      }, '넌센스 (공통)', el('small', {}, `${nonsenseAll.length}문항`)),
     );
 
-    // 학년 버튼: 그 학년의 문항 전체
-    const gradeList = state.questions.filter((q) => q.grade === state.qGrade);
-    const regular = gradeList.filter((q) => q.category === 'regular');
-    const ox = regular.filter((q) => q.type === 'ox').length;
-    const mc = regular.filter((q) => q.type === 'mc').length;
-    const nonsense = gradeList.length - regular.length;
-
-    // 과목 버튼: 이 학년에 문항이 있는 과목만 (넌센스 문항은 '넌센스' 과목으로 표시)
-    const subjectCount = new Map();
-    gradeList.forEach((q) => subjectCount.set(q.subject, (subjectCount.get(q.subject) || 0) + 1));
-    const known = state.config.subjects.filter((s) => subjectCount.has(s));
-    const others = [...subjectCount.keys()].filter((s) => !state.config.subjects.includes(s) && s !== '넌센스');
-    const subjectOrder = [...known, ...others, ...(subjectCount.has('넌센스') ? ['넌센스'] : [])];
-    if (state.qSubject && !subjectCount.has(state.qSubject)) state.qSubject = ''; // 삭제 등으로 사라진 과목
-    const tabBtn = (label, active, onclick) =>
-      el('button', { class: `tab${active ? ' active' : ''}`, type: 'button', onclick }, label);
-    const pick = (field, value) => () => { state[field] = value; state.qPage = 0; renderQuestions(); };
-    $('#q-subjects').replaceChildren(
-      tabBtn(`전체 과목 (${gradeList.length})`, state.qSubject === '', () => {
-        state.qSubject = ''; state.qType = ''; state.qPage = 0; renderQuestions();
-      }),
-      ...subjectOrder.map((s) =>
-        tabBtn(`${s} (${subjectCount.get(s)})`, state.qSubject === s, () => {
-          state.qSubject = s; state.qType = ''; state.qPage = 0; renderQuestions();
-        })),
-    );
-
-    // 유형 버튼: 선택한 과목 안에서 객관식 / O,X 로 좁힌다
-    const subjectList = state.qSubject ? gradeList.filter((q) => q.subject === state.qSubject) : gradeList;
-    const mcAll = subjectList.filter((q) => q.type === 'mc').length;
-    const oxAll = subjectList.filter((q) => q.type === 'ox').length;
-    if ((state.qType === 'mc' && mcAll === 0) || (state.qType === 'ox' && oxAll === 0)) state.qType = '';
-    $('#q-types').replaceChildren(
-      tabBtn(`전체 유형 (${subjectList.length})`, state.qType === '', pick('qType', '')),
-      tabBtn(`객관식 문항 (${mcAll})`, state.qType === 'mc', pick('qType', 'mc')),
-      tabBtn(`O,X 문항 (${oxAll})`, state.qType === 'ox', pick('qType', 'ox')),
-    );
-
-    const list = state.qType ? subjectList.filter((q) => q.type === state.qType) : subjectList;
-    const typeName = { mc: '객관식 문항', ox: 'O,X 문항' }[state.qType];
-    $('#q-path').textContent = [`${state.qGrade}학년`, state.qSubject || '전체 과목', typeName || '전체 유형']
-      .join(' › ') + `  ·  ${list.length}개`;
+    const list = isNonsenseTab ? nonsenseAll : regularOf(state.qGrade);
+    const ox = list.filter((q) => q.type === 'ox').length;
+    const mc = list.filter((q) => q.type === 'mc').length;
     $('#q-counts').replaceChildren(
-      el('span', { class: 'badge' }, `일반 O X ${ox}개`),
-      el('span', { class: 'badge' }, `일반 객관식 ${mc}개`),
-      el('span', { class: 'badge' }, `넌센스 ${nonsense}개`),
+      ...(isNonsenseTab
+        ? [el('span', { class: 'badge' }, `넌센스 ${nonsenseAll.length}개 (모든 학년 공통)`)]
+        : [
+          el('span', { class: 'badge' }, `일반 O X ${ox}개`),
+          el('span', { class: 'badge' }, `일반 객관식 ${mc}개`),
+          el('span', { class: 'badge' }, `넌센스 ${nonsenseAll.length}개 (공통)`),
+        ]),
     );
     const warn = $('#q-warn');
     const notes = [];
-    const lacks = [];
-    if (ox < 2) lacks.push(`일반 O X 퀴즈 ${2 - ox}개`);
-    if (mc < 3) lacks.push(`일반 객관식 ${3 - mc}개`);
-    if (lacks.length) notes.push(`일반 퀴즈를 열려면 ${lacks.join(', ')}가 더 필요해요. (O X 2 + 객관식 3 고정)`);
-    if (nonsense < NONSENSE_NEEDED) notes.push(`넌센스 퀴즈를 열려면 ${NONSENSE_NEEDED - nonsense}개가 더 필요해요. (5문제 출제)`);
+    if (!isNonsenseTab) {
+      const lacks = [];
+      if (ox < 2) lacks.push(`일반 O X 퀴즈 ${2 - ox}개`);
+      if (mc < 3) lacks.push(`일반 객관식 ${3 - mc}개`);
+      if (lacks.length) notes.push(`일반 퀴즈를 열려면 ${lacks.join(', ')}가 더 필요해요. (O X 2 + 객관식 3 고정)`);
+    }
+    if (nonsenseKinds < NONSENSE_NEEDED) notes.push(`넌센스 퀴즈(모든 학년 공통)를 열려면 ${NONSENSE_NEEDED - nonsenseKinds}개가 더 필요해요. (5문제 출제)`);
     warn.hidden = notes.length === 0;
     warn.replaceChildren(...notes.map((t) => el('div', {}, t)));
 
@@ -340,7 +310,7 @@
         ...(state.qPage === 0 ? { disabled: '' } : {}),
         onclick: () => { state.qPage -= 1; renderQuestions(); },
       }, '◀ 이전'),
-      el('span', { class: 'pager-info' }, `${state.qPage + 1} / ${pages}쪽 · ${list.length}개`),
+      el('span', { class: 'pager-info' }, `${state.qPage + 1} / ${pages}쪽 · 전체 ${list.length}개`),
       el('button', {
         class: 'btn secondary small', type: 'button',
         ...(state.qPage >= pages - 1 ? { disabled: '' } : {}),
@@ -351,9 +321,7 @@
     $('#q-pager-top').replaceChildren(...(showPager ? [buildPager()] : []));
     $('#q-pager').replaceChildren(...(showPager ? [buildPager()] : []));
     $('#q-empty').hidden = showPager;
-    $('#q-empty').textContent = gradeList.length === 0
-      ? '이 학년에는 등록된 문항이 없어요.'
-      : '선택한 조건에 맞는 문항이 없어요.';
+    $('#q-empty').textContent = isNonsenseTab ? '등록된 넌센스 문항이 없어요.' : '이 학년에는 등록된 일반 문항이 없어요.';
 
     $('#q-list').replaceChildren(
       ...pageItems.map((q, i) => {
@@ -397,10 +365,9 @@
       await api('/api/admin/questions', { method: 'POST', body });
       $('#q-body-input').value = '';
       document.querySelectorAll('.mc-text').forEach((i) => { i.value = ''; });
-      toast(`${body.grade}학년 문항을 추가했어요.`);
-      state.qGrade = body.grade;
-      state.qSubject = '';  // 방금 추가한 문항이 보이도록 과목/유형 선택은 '전체'로
-      state.qType = '';
+      const common = body.category === 'nonsense';
+      toast(common ? '넌센스(공통) 문항을 추가했어요.' : `${body.grade}학년 문항을 추가했어요.`);
+      state.qGrade = common ? NONSENSE_TAB : body.grade;
       state.qPage = Number.MAX_SAFE_INTEGER; // 렌더링할 때 마지막 쪽으로 맞춰짐
       await loadQuestions();
       renderQuestions();

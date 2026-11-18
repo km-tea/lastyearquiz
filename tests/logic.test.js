@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSeat, validateQuestion } from '../netlify/lib/config.js';
+import { parseSeat, validateQuestion, NONSENSE_GRADE } from '../netlify/lib/config.js';
 import { pickQuestions } from '../netlify/lib/pick.js';
 import { parseBulkRows } from '../netlify/lib/bulk.js';
 
@@ -30,10 +30,16 @@ test('문항 검증', () => {
   assert.ok(validateQuestion({ grade: 1, type: 'mc', subject: '없는교과', body: 'x', choices: ['a', 'b', 'c', 'd'], answer: 0 }).error);
 });
 
-test('넌센스 문항은 교과 없이 등록되고, 구분 값이 잘못되면 거부', () => {
+test('넌센스 문항은 교과·학년 없이 등록되고, 구분 값이 잘못되면 거부', () => {
   const r = validateQuestion({ grade: 3, category: 'nonsense', type: 'ox', body: '넌센스', answer: 0 });
   assert.equal(r.value.subject, '넌센스');
   assert.equal(r.value.category, 'nonsense');
+  // 넌센스는 모든 학년 공통: 학년을 주지 않아도 되고, 줘도 무시된다
+  assert.equal(validateQuestion({ category: 'nonsense', type: 'ox', body: '넌센스', answer: 1 }).value.grade, NONSENSE_GRADE);
+  assert.equal(r.value.grade, NONSENSE_GRADE);
+  // 일반 문항은 학년이 꼭 필요하다
+  assert.ok(validateQuestion({ type: 'ox', subject: '수학', body: 'x', answer: 0 }).error);
+  assert.ok(validateQuestion({ grade: 9, type: 'ox', subject: '수학', body: 'x', answer: 0 }).error);
   assert.ok(validateQuestion({ grade: 3, category: 'etc', type: 'ox', subject: '수학', body: 'x', answer: 0 }).error);
   assert.equal(validateQuestion({ grade: 3, type: 'ox', subject: '수학', body: 'x', answer: 0 }).value.category, 'regular');
 });
@@ -48,7 +54,14 @@ test('엑셀 행 변환: 여러 표기와 오류 행 번호', () => {
   const ok = parseBulkRows(rows);
   assert.equal(ok.errors.length, 0);
   assert.deepEqual(ok.items.map((q) => q.answer), [1, 1, 2, 0]);
-  assert.deepEqual(ok.items.map((q) => q.grade), [1, 6, 2, 3]);
+  assert.deepEqual(ok.items.map((q) => q.grade), [1, NONSENSE_GRADE, 2, 3]); // 넌센스는 학년이 무엇이든 공통(무시)
+  // 넌센스 행은 학년 칸이 비어 있어도 되고, 일반 행은 비어 있으면 오류
+  const blank = parseBulkRows([
+    { 학년: '', 구분: '넌센스', 유형: 'OX', 교과: '', 문제: 'q', 정답: 'O' },
+    { 학년: '', 구분: '정규', 유형: 'OX', 교과: '수학', 문제: 'q', 정답: 'O' },
+  ]);
+  assert.equal(blank.items.length, 1);
+  assert.deepEqual(blank.errors.map((e) => e.row), [3]);
 
   const bad = parseBulkRows([
     { 학년: 1, 구분: '정규', 유형: '객관식', 교과: '수학', 문제: 'q', 보기1: 'a', 보기2: 'a', 보기3: 'c', 보기4: 'd', 정답: 1 }, // 2행: 보기 중복

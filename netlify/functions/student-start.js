@@ -7,6 +7,7 @@ import { signToken } from '../lib/auth.js';
 
 // 2단계: 도전 기록 생성(또는 갱신) + 문제 출제.
 //  · track = 'regular'(일반 퀴즈, 기본값) | 'nonsense'(넌센스 퀴즈). 학생이 반/번호 확인 뒤에 직접 고른다.
+//    일반 퀴즈 문제는 학년별이고, 넌센스 퀴즈 문제는 모든 학년 공통이다.
 //  · 어느 쪽이든 5문제를 모두 맞히면 수료이고, 수료 기록은 하나뿐이다. (일반으로 수료하면 넌센스도 다시 풀 수 없음)
 //  · 기록이 없으면 새로 만들고, 수료하지 못한 기록이 있으면 새 도전으로 덮어쓴다(attempt_count + 1).
 //  · 수료 기록이 있으면 WHERE 조건에 걸려 아무것도 갱신되지 않아 차단된다. (한 문장으로 처리되어 동시 요청에도 안전)
@@ -21,14 +22,16 @@ export default handleErrors(async (req) => {
   const sql = await getSql();
   let picked;
   if (track === 'nonsense') {
-    const rows = await loadNonsense(sql, seat.grade);
+    const rows = await loadNonsense(sql);
     picked = rows.length >= NONSENSE_COUNT ? rows : null;
   } else {
     picked = pickQuestions(await loadPool(sql, seat.grade));
   }
   if (!picked) {
-    const name = track === 'nonsense' ? '넌센스' : '일반';
-    return json({ error: `아직 이 학년의 ${name} 퀴즈 문제가 준비되지 않았어요. 선생님께 알려 주세요.`, code: 'NO_QUESTIONS' }, 503);
+    const message = track === 'nonsense'
+      ? '아직 넌센스 퀴즈 문제가 준비되지 않았어요. 선생님께 알려 주세요.'
+      : '아직 이 학년의 일반 퀴즈 문제가 준비되지 않았어요. 선생님께 알려 주세요.';
+    return json({ error: message, code: 'NO_QUESTIONS' }, 503);
   }
 
   const ids = intArrayLiteral(picked.map((q) => q.id));

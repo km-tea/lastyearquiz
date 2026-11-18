@@ -123,11 +123,15 @@
 
         <!-- 등록된 문항 -->
         <h3 style="margin-top:28px">등록된 문항</h3>
+        <!-- ① 학년 → ② 과목 → ③ 유형 순서로 좁혀 가며 확인 -->
         <div class="tabs" id="q-grades"></div>
+        <div class="tabs sub" id="q-subjects"></div>
+        <div class="tabs sub" id="q-types"></div>
         <div class="summary" id="q-counts"></div>
         <div class="warn-box" id="q-warn" hidden></div>
+        <div class="q-path" id="q-path"></div>
         <div id="q-pager-top"></div>
-        <p class="muted" id="q-empty" hidden>이 학년에는 등록된 문항이 없어요.</p>
+        <p class="muted" id="q-empty" hidden></p>
         <ul class="q-list" id="q-list"></ul>
         <div id="q-pager"></div>
       </section>

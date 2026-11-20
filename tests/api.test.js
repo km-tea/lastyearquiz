@@ -81,9 +81,20 @@ function fakeSql(strings, ...v) {
     if (x) x.is_active = false;
     return ok(x ? [{ id: x.id }] : []);
   }
-  if (q.startsWith('SELECT count(*)::int AS n FROM admin_login_failures')) return ok([{ n: db.failures.length }]);
-  if (q.startsWith('INSERT INTO admin_login_failures')) { db.failures.push(1); return ok([]); }
-  if (q.startsWith('DELETE FROM admin_login_failures')) return ok([]);
+  // 로그인 실패 기록: { device, ip, t(실패한 시각, ms) } — 5분 창 계산은 서버 쿼리와 같은 규칙
+  if (q.startsWith('SELECT column_name FROM information_schema.columns')) return ok([{ column_name: 'device' }, { column_name: 'ip' }]);
+  if (q.startsWith('SELECT device, ip, GREATEST(1, ceil(')) {
+    const [device, ip] = v;
+    return ok(db.failures
+      .filter((f) => Date.now() - f.t < 300000 && (f.device === device || f.ip === ip))
+      .sort((a, b) => b.t - a.t)
+      .map((f) => ({ device: f.device, ip: f.ip, wait_s: Math.max(1, Math.ceil((f.t + 300000 - Date.now()) / 1000)) })));
+  }
+  if (q.startsWith('INSERT INTO admin_login_failures (device, ip) VALUES')) { db.failures.push({ device: v[0], ip: v[1], t: Date.now() }); return ok([]); }
+  if (q.startsWith('DELETE FROM admin_login_failures WHERE device =')) {
+    db.failures = db.failures.filter((f) => f.device !== v[0] && Date.now() - f.t < 86400000);
+    return ok([]);
+  }
   throw new Error(`fake sql: 처리되지 않은 쿼리: ${q}`);
 }
 setSqlForTests(fakeSql);
@@ -282,11 +293,56 @@ test('엑셀 일괄 등록: 미리보기 → 오류 시 전체 거부 → 정상
   assert.equal(added[2].subject, '넌센스');
 });
 
-test('관리자 코드 무작위 대입 방지 (최근 실패 10번 넘으면 잠금)', async () => {
+// 같은 IP를 쓰는 다른 기기/다른 IP를 흉내 내려고 헤더를 직접 지정하는 호출
+const loginFrom = (login, body, ip) => login(new Request('http://x/', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', ...(ip ? { 'x-nf-client-connection-ip': ip } : {}) },
+  body: JSON.stringify(body),
+}));
+const DEV_A = 'device-aaaa-1111-aaaa-1111';
+const DEV_B = 'device-bbbb-2222-bbbb-2222';
+
+test('로그인 실패 제한: 기기마다 따로 10번, 막힌 기기 말고 다른 기기는 영향 없음', async () => {
   db.failures = [];
   const login = await h('admin-login');
-  for (let i = 0; i < 10; i++) assert.equal((await call(login, 'POST', '/', { code: String(1000 + i) })).status, 401);
-  assert.equal((await call(login, 'POST', '/', { code: '0227' })).status, 429); // 맞는 코드도 잠시 불가
+  for (let i = 0; i < 10; i++) {
+    const r = await loginFrom(login, { code: String(1000 + i), deviceId: DEV_A }, '10.0.0.1');
+    assert.equal(r.status, 401);
+    const msg = (await r.json()).error;
+    if (i === 6) assert.ok(msg.includes('3번 더'), msg);      // 7번째 실패: 3번 남음
+    if (i === 9) assert.ok(msg.includes('5분 뒤'), msg);      // 10번째 실패: 이제 막힘 안내
+    if (i === 0) assert.ok(!msg.includes('번 더'), msg);      // 처음에는 남은 횟수를 굳이 알리지 않음
+  }
+  // A 기기는 맞는 코드도 막힌다 (몇 분 뒤인지 알려 줌)
+  const blocked = await loginFrom(login, { code: '0227', deviceId: DEV_A }, '10.0.0.1');
+  assert.equal(blocked.status, 429);
+  const info = await blocked.json();
+  assert.ok(info.error.includes('이 기기') && info.error.includes('5분 뒤'), info.error);
+  assert.ok(info.retryAfterSec > 0 && info.retryAfterSec <= 300);
+  // 같은 네트워크의 다른 기기(B)는 맞는 코드로 바로 로그인된다
+  assert.equal((await loginFrom(login, { code: '0227', deviceId: DEV_B }, '10.0.0.1')).status, 200);
+  // 시간이 5분 지나면 A 기기도 다시 가능하고, 성공하면 실패 기록이 지워진다
+  db.failures.forEach((f) => { f.t -= 301000; });
+  assert.equal((await loginFrom(login, { code: '0227', deviceId: DEV_A }, '10.0.0.1')).status, 200);
+  assert.equal(db.failures.filter((f) => f.device === `d:${DEV_A}`).length, 0);
+});
+
+test('로그인 실패 제한: 기기 번호를 계속 바꿔도 같은 네트워크는 30번까지, 번호가 없으면 네트워크를 한 기기로 봄', async () => {
   db.failures = [];
-  assert.equal((await call(login, 'POST', '/', { code: '0227' })).status, 200);
+  const login = await h('admin-login');
+  for (let i = 0; i < 30; i++) {
+    const r = await loginFrom(login, { code: '9999', deviceId: `device-rotating-${String(i).padStart(4, '0')}` }, '10.0.0.2');
+    assert.equal(r.status, 401); // 기기마다 1번씩이라 기기 한도(10)에는 안 걸림
+  }
+  const net = await loginFrom(login, { code: '0227', deviceId: 'device-brand-new-0001' }, '10.0.0.2');
+  assert.equal(net.status, 429);
+  assert.ok((await net.json()).error.includes('같은 네트워크'));
+  // 다른 네트워크(IP)는 영향 없음
+  assert.equal((await loginFrom(login, { code: '0227', deviceId: 'device-brand-new-0002' }, '10.0.0.3')).status, 200);
+
+  // 기기 번호를 보내지 않으면(또는 형식이 틀리면) 그 네트워크를 한 기기로 보고 10번에서 막는다
+  db.failures = [];
+  for (let i = 0; i < 10; i++) assert.equal((await loginFrom(login, { code: '1', deviceId: 'x' }, '10.0.0.4')).status, 401);
+  assert.equal((await loginFrom(login, { code: '0227' }, '10.0.0.4')).status, 429);
+  assert.equal((await loginFrom(login, { code: '0227', deviceId: DEV_B }, '10.0.0.4')).status, 200); // 번호를 보낸 기기는 별개
 });

@@ -54,5 +54,10 @@ ALTER TABLE attempts ADD COLUMN IF NOT EXISTS attempt_count INT NOT NULL DEFAULT
 -- 관리자 코드 무작위 대입 방지용 실패 기록
 CREATE TABLE IF NOT EXISTS admin_login_failures (
   id        SERIAL PRIMARY KEY,
-  failed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  failed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  device    TEXT,   -- 로그인을 시도한 기기 번호(브라우저가 만든 임의 값): 기기마다 실패 횟수를 따로 센다
+  ip        TEXT    -- 같은 네트워크(IP)에서 나온 실패의 합계를 세는 데 사용
 );
+-- 예전 버전으로 이미 만들어 둔 DB를 위한 보충 (여러 번 실행해도 안전)
+ALTER TABLE admin_login_failures ADD COLUMN IF NOT EXISTS device TEXT;
+ALTER TABLE admin_login_failures ADD COLUMN IF NOT EXISTS ip TEXT;

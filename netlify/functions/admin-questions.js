@@ -5,6 +5,7 @@ import { validateQuestion } from '../lib/config.js';
 
 // GET ?grade=N : 그 학년의 일반 문항 목록 (grade 없이 부르면 넌센스 포함 전체) / POST : 문항 1개 추가 / DELETE ?id=N : 문항 삭제(비활성화)
 // 넌센스 문항은 모든 학년 공통이라 학년 없이 등록한다.
+// 목록은 최근에 만든 문항이 먼저 나온다. (엑셀로 한 번에 올린 문항은 같은 시각이라, 묶음 안에서는 엑셀에 적은 순서를 유지)
 export default handleErrors(async (req) => {
   if (!requireAdmin(req)) return unauthorized();
   const sql = await getSql();
@@ -15,10 +16,10 @@ export default handleErrors(async (req) => {
     const questions = Number.isInteger(grade) && grade >= 1 && grade <= 6
       ? await sql`
           SELECT id, grade, category, type, subject, body, choices, answer
-          FROM questions WHERE grade = ${grade} AND category = 'regular' AND is_active = TRUE ORDER BY id`
+          FROM questions WHERE grade = ${grade} AND category = 'regular' AND is_active = TRUE ORDER BY created_at DESC, id`
       : await sql`
           SELECT id, grade, category, type, subject, body, choices, answer
-          FROM questions WHERE is_active = TRUE ORDER BY id`;
+          FROM questions WHERE is_active = TRUE ORDER BY created_at DESC, id`;
     return json({ questions });
   }
 

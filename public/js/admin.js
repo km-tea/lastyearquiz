@@ -3,6 +3,7 @@
 
   const $ = (sel) => document.querySelector(sel);
   const TOKEN_KEY = 'quiz_admin_token';
+  const DEVICE_KEY = 'quiz_admin_device';
   const XLSX_SOURCES = [
     'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
     'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js',
@@ -28,6 +29,29 @@
   const STATUS_LABEL = { started: '풀이 중/중단', completed: '수료', failed: '미수료' };
 
   // ---------- 공통 ----------
+  // 이 브라우저(기기)를 구분하는 임의 번호. 처음 한 번 만들어 저장해 두고 로그인할 때 함께 보낸다.
+  // 서버는 이 번호로 기기마다 로그인 실패 횟수를 따로 센다. (저장을 못 하는 환경이면 접속할 때마다 새로 만든다)
+  let memoryDeviceId = null;
+  function randomId() {
+    const bytes = new Uint8Array(16);
+    (window.crypto || window.msCrypto)?.getRandomValues?.(bytes);
+    if (bytes.every((b) => b === 0)) for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  function getDeviceId() {
+    try {
+      let id = localStorage.getItem(DEVICE_KEY);
+      if (!/^[A-Za-z0-9-]{16,64}$/.test(id || '')) {
+        id = randomId();
+        localStorage.setItem(DEVICE_KEY, id);
+      }
+      return id;
+    } catch {
+      memoryDeviceId = memoryDeviceId || randomId();
+      return memoryDeviceId;
+    }
+  }
+
   const getToken = () => { try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; } };
   const setToken = (t) => {
     try { t ? sessionStorage.setItem(TOKEN_KEY, t) : sessionStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
@@ -99,7 +123,7 @@
     try {
       const { token } = await api('/api/admin/login', {
         method: 'POST',
-        body: { code: $('#login-code').value.trim() },
+        body: { code: $('#login-code').value.trim(), deviceId: getDeviceId() },
       });
       setToken(token);
       $('#login-code').value = '';
@@ -368,7 +392,7 @@
       const common = body.category === 'nonsense';
       toast(common ? '넌센스(공통) 문항을 추가했어요.' : `${body.grade}학년 문항을 추가했어요.`);
       state.qGrade = common ? NONSENSE_TAB : body.grade;
-      state.qPage = Number.MAX_SAFE_INTEGER; // 렌더링할 때 마지막 쪽으로 맞춰짐
+      state.qPage = 0; // 최근에 만든 문항이 맨 앞이므로, 방금 추가한 문항이 보이는 첫 쪽으로 이동
       await loadQuestions();
       renderQuestions();
     } catch (ex) {
